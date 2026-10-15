@@ -1,0 +1,37 @@
+name: Deploy Spring Boot to VPS
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Image"]
+    types:
+      - completed
+
+jobs:
+  deploy-vps:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Thực thi câu lệnh triển khai trên VPS qua SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "Logging in to GHCR..."
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "Pulling latest Docker image..."
+            docker pull ghcr.io/${{ github.actor }}/my-app:latest
+
+            echo "Stopping and removing old container..."
+            docker stop my-app || true
+            docker rm my-app || true
+
+            echo "Running new container..."
+            docker run -d --name my-app -p 8080:8080 ghcr.io/${{ github.actor }}/my-app:latest
+
+            echo "Deployment completed successfully!"
